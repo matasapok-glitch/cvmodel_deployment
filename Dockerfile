@@ -22,5 +22,5 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Start the FastAPI app
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start the FastAPI app - using Python to read PORT env variable
+CMD ["python", "-c", "import os, uvicorn; uvicorn.run('main:app', host='0.0.0.0', port=int(os.getenv('PORT', '8000')))"]
