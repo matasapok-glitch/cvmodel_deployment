@@ -136,6 +136,9 @@ async def analyze_video(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
     
     try:
+        # Create a new PoseLandmarker instance for this video to avoid timestamp state issues
+        video_pose = vision.PoseLandmarker.create_from_options(options)
+        
         # Process video
         cap = cv2.VideoCapture(str(temp_input))
         
@@ -148,7 +151,7 @@ async def analyze_video(file: UploadFile = File(...)):
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(str(output_video), fourcc, fps_out, (width, height))
         
-        frame_timestamp_ms = ref_frame_timestamp
+        frame_timestamp_ms = 0
         frame_index = 0
         landmark_correct_frames = {idx: 0 for idx in selected_indices}
         landmark_threshold = 0.05
@@ -161,7 +164,7 @@ async def analyze_video(file: UploadFile = File(...)):
             imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=imgRGB)
             
-            results = pose.detect_for_video(mp_image, frame_timestamp_ms)
+            results = video_pose.detect_for_video(mp_image, frame_timestamp_ms)
             frame_timestamp_ms += 33
             
             if frame_index < len(reference_poses):
