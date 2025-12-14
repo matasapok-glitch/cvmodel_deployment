@@ -107,6 +107,7 @@ paths:
                     total_frames: 150
                     accuracy_percentage: 94.67
                 analyzed_video: "/download/video/analyzed_example.mp4"
+                stream_video: "/stream/video/analyzed_example.mp4"
                 chart: "/download/chart/chart_example.png"
         '400':
           description: Invalid file type
@@ -189,6 +190,90 @@ paths:
               example:
                 detail: "Chart not found"
 
+  /stream/video/{filename}:
+    get:
+      summary: Stream analyzed video
+      description: |
+        Streams the analyzed video file with HTTP range request support, enabling
+        video players and browsers to seek through the video. Supports partial content
+        requests for efficient streaming and seeking.
+      operationId: streamVideo
+      tags:
+        - Streaming
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          description: Name of the video file to stream
+          schema:
+            type: string
+          example: analyzed_example.mp4
+        - name: Range
+          in: header
+          required: false
+          description: HTTP Range header for partial content requests (e.g., "bytes=0-1023")
+          schema:
+            type: string
+          example: bytes=0-1023
+      responses:
+        '200':
+          description: Full video file stream
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Accept-Ranges:
+              description: Indicates that range requests are supported
+              schema:
+                type: string
+                example: bytes
+            Content-Length:
+              description: Size of the video file in bytes
+              schema:
+                type: integer
+                example: 5242880
+        '206':
+          description: Partial content (range request)
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Range:
+              description: Range of bytes being returned
+              schema:
+                type: string
+                example: bytes 0-1023/5242880
+            Accept-Ranges:
+              description: Indicates that range requests are supported
+              schema:
+                type: string
+                example: bytes
+            Content-Length:
+              description: Size of the requested range in bytes
+              schema:
+                type: integer
+                example: 1024
+        '404':
+          description: Video file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Video not found"
+        '416':
+          description: Range not satisfiable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Range not satisfiable"
+
 components:
   schemas:
     RootResponse:
@@ -254,6 +339,11 @@ components:
           format: uri
           description: URL path to download the analyzed video
           example: "/download/video/analyzed_example.mp4"
+        stream_video:
+          type: string
+          format: uri
+          description: URL path to stream the analyzed video (supports HTTP range requests)
+          example: "/stream/video/analyzed_example.mp4"
         chart:
           type: string
           format: uri
@@ -293,4 +383,6 @@ tags:
     description: Video pose analysis endpoints
   - name: Downloads
     description: File download endpoints
+  - name: Streaming
+    description: Video streaming endpoints with HTTP range request support
 

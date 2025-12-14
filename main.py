@@ -1,5 +1,5 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -270,6 +270,7 @@ async def analyze_video(file: UploadFile = File(...)):
             "reference_frames": perfect_frames,
             "per_landmark_accuracy": per_landmark_stats,
             "analyzed_video": f"/download/video/{output_video.name}",
+            "stream_video": f"/stream/video/{output_video.name}",
             "chart": f"/download/chart/{output_chart.name}"
         })
     
@@ -294,6 +295,59 @@ def download_chart(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Chart not found")
     return FileResponse(file_path, media_type="image/png", filename=filename)
+
+@app.get("/stream/video/{filename}")
+async def stream_video(filename: str, request: Request):
+    file_path = OUTPUT_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get('range')
+    
+    if range_header:
+        range_match = range_header.replace('bytes=', '').split('-')
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+        
+        if start >= file_size or end >= file_size:
+            raise HTTPException(status_code=416, detail="Range not satisfiable")
+        
+        chunk_size = end - start + 1
+        
+        def generate():
+            with open(file_path, 'rb') as f:
+                f.seek(start)
+                remaining = chunk_size
+                while remaining:
+                    chunk = f.read(min(8192, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        
+        headers = {
+            'Content-Range': f'bytes {start}-{end}/{file_size}',
+            'Accept-Ranges': 'bytes',
+            'Content-Length': str(chunk_size),
+            'Content-Type': 'video/mp4',
+        }
+        return StreamingResponse(generate(), status_code=206, headers=headers)
+    else:
+        def generate():
+            with open(file_path, 'rb') as f:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+        
+        headers = {
+            'Accept-Ranges': 'bytes',
+            'Content-Length': str(file_size),
+            'Content-Type': 'video/mp4',
+        }
+        return StreamingResponse(generate(), headers=headers)
 
 if __name__ == "__main__":
     import uvicorn
