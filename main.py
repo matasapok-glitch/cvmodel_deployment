@@ -147,6 +147,13 @@ async def analyze_video(file: UploadFile = File(...)):
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
+        # Check for rotation metadata
+        rotation = int(cap.get(cv2.CAP_PROP_ORIENTATION_META))
+        
+        # Adjust dimensions if video is rotated 90 or 270 degrees
+        if rotation in [90, 270]:
+            width, height = height, width
+        
         output_video = OUTPUT_DIR / f"analyzed_{file.filename}"
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(str(output_video), fourcc, fps_out, (width, height))
@@ -160,6 +167,14 @@ async def analyze_video(file: UploadFile = File(...)):
             success, img = cap.read()
             if not success:
                 break
+            
+            # Apply rotation correction if needed
+            if rotation == 90:
+                img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+            elif rotation == 180:
+                img = cv2.rotate(img, cv2.ROTATE_180)
+            elif rotation == 270:
+                img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
             
             imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=imgRGB)
@@ -176,6 +191,9 @@ async def analyze_video(file: UploadFile = File(...)):
             
             if results.pose_landmarks and ref_pose:
                 comp_pose = results.pose_landmarks[0]
+                
+                # Calculate weighted distance for entire pose
+                pose_distance = weighted_distance(comp_pose, ref_pose)
                 
                 pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
                 for idx in selected_indices:
@@ -194,6 +212,7 @@ async def analyze_video(file: UploadFile = File(...)):
                         comp_lm = comp_pose[actual_idx]
                         ref_lm = ref_pose[actual_idx]
                         
+                        # Per-landmark Euclidean distance
                         dx = comp_lm.x - ref_lm.x
                         dy = comp_lm.y - ref_lm.y
                         landmark_distance = math.sqrt(dx*dx + dy*dy)
